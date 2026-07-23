@@ -24,47 +24,29 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          $WorkDir = Join-Path $env:TEMP 'winget-install'
-          $DepsDir = Join-Path $WorkDir 'DesktopAppInstaller_Dependencies'
-          New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+          $downloadDir = 'C:\WinGetInstall'
+          if (-not (Test-Path $downloadDir)) { New-Item -Path $downloadDir -ItemType Directory | Out-Null }
+          Push-Location $downloadDir
 
-          # Get latest stable WinGet release assets
-          $Release = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
-          $MsixBundle = $Release.assets | Where-Object { $_.name -eq 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle' } | Select-Object -First 1
-          $DependenciesZip = $Release.assets | Where-Object { $_.name -eq 'DesktopAppInstaller_Dependencies.zip' } | Select-Object -First 1
-          $LicenseFile = $Release.assets | Where-Object { $_.name -like '*_License1.xml' } | Select-Object -First 1
+          # Download dependencies & winget
+          Invoke-WebRequest -Uri 'https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx' -OutFile 'vclibs.appx'
+          Invoke-WebRequest -Uri 'https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx' -OutFile 'xaml.appx'
+          Invoke-WebRequest -Uri 'https://aka.ms/getwinget' -OutFile 'winget.msixbundle'
 
-          if (-not $MsixBundle -or -not $DependenciesZip -or -not $LicenseFile) {
-              throw 'Could not find all required WinGet release assets.'
-          }
-
-          $MsixBundlePath = Join-Path $WorkDir 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
-          $DependenciesZipPath = Join-Path $WorkDir 'DesktopAppInstaller_Dependencies.zip'
-          $LicensePath = Join-Path $WorkDir 'license.xml'
-
-          # Download release packages
-          Invoke-WebRequest -Uri $MsixBundle.browser_download_url -OutFile $MsixBundlePath
-          Invoke-WebRequest -Uri $DependenciesZip.browser_download_url -OutFile $DependenciesZipPath
-          Invoke-WebRequest -Uri $LicenseFile.browser_download_url -OutFile $LicensePath
-
-          # Extract dependencies
-          Expand-Archive -Path $DependenciesZipPath -DestinationPath $DepsDir -Force
-          $DependencyPath = Join-Path $DepsDir 'x64'
-          $DepFiles = Get-ChildItem -Path $DependencyPath -File | Where-Object { $_.Extension -in '.appx', '.msix' } | Select-Object -ExpandProperty FullName
+          # Fetch matching license file for DISM provisioning
+          $releasesUri = 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
+          $licenseUrl = ((Invoke-RestMethod -Uri $releasesUri).assets | Where-Object name -like '*.xml').browser_download_url
+          Invoke-WebRequest -Uri $licenseUrl -OutFile 'license.xml'
 
           # System-wide provision via DISM
-          Add-AppxProvisionedPackage -Online -PackagePath $MsixBundlePath -LicensePath $LicensePath -DependencyPackagePath $DepFiles
-          Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction SilentlyContinue
+          $deps = @("$downloadDir\vclibs.appx", "$downloadDir\xaml.appx")
+          Add-AppxProvisionedPackage -Online -PackagePath "$downloadDir\winget.msixbundle" -LicensePath "$downloadDir\license.xml" -DependencyPackagePath $deps
+          Add-AppxPackage -RegisterByFamilyName -MainPackage 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe' -ErrorAction SilentlyContinue
 
           # Refresh Session PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
-
-          # Verify winget or locate direct binary path if not added to env PATH yet
-          $wingetExe = Get-Command winget -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-          if (-not $wingetExe) {
-              $wingetExe = (Get-ChildItem -Path "$env:ProgramFiles\WindowsApps" -Filter "winget.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
-          }
-          if ($wingetExe) { & $wingetExe --info } else { Write-Host 'WinGet installed successfully (PATH will refresh on next login).' }
+          Pop-Location
+          Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Optimize RDP Performance
         shell: powershell
