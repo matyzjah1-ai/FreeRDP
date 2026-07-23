@@ -11,13 +11,41 @@ jobs:
       - name: Configure RDP Credentials
         shell: powershell
         run: |
-          if ('Mateusz' -ne 'runneradmin') {
-            Rename-LocalUser -Name 'runneradmin' -NewName 'Mateusz'
+          if ('runneradmin' -ne 'runneradmin') {
+            Rename-LocalUser -Name 'runneradmin' -NewName 'runneradmin'
           }
-          net user Mateusz Password123!
+          net user runneradmin Password123!
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
           Set-NetFirewallRule -Name 'RemoteDesktop-UserMode-In-TCP' -Enabled True -ErrorAction SilentlyContinue
-          Write-Host "RDP enabled for Mateusz"
+          Write-Host "RDP enabled for runneradmin"
+
+      - name: Install Winget
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $downloadDir = "$env:TEMP\winget-install"
+          New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+
+          Invoke-WebRequest -Uri "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" -OutFile "$downloadDir\vclibs.appx"
+          Add-AppxPackage -Path "$downloadDir\vclibs.appx"
+
+          Invoke-WebRequest -Uri "https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx" -OutFile "$downloadDir\xaml.appx"
+          Add-AppxPackage -Path "$downloadDir\xaml.appx"
+
+          Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$downloadDir\winget.msixbundle"
+          Add-AppxPackage -Path "$downloadDir\winget.msixbundle"
+
+          Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction SilentlyContinue
+
+          $wingetPath = Get-ChildItem "$env:ProgramFiles\WindowsApps" -Filter "Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($wingetPath) {
+              Write-Host "Winget installed at: $($wingetPath.FullName)"
+              $env:PATH += ";$($wingetPath.FullName)"
+          } else {
+              Write-Host "Warning: could not locate winget install path automatically."
+          }
+          Remove-Item -Path $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Optimize RDP Performance
         shell: powershell
