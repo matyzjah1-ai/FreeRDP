@@ -11,25 +11,36 @@ jobs:
       - name: Configure RDP Credentials
         shell: powershell
         run: |
-          if ('mateusz' -ne 'runneradmin') {
-            Rename-LocalUser -Name 'runneradmin' -NewName 'mateusz'
+          if ('Mateusz' -ne 'runneradmin') {
+            Rename-LocalUser -Name 'runneradmin' -NewName 'Mateusz'
           }
-          net user mateusz Password123!
+          net user Mateusz Password123!
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
           Set-NetFirewallRule -Name 'RemoteDesktop-UserMode-In-TCP' -Enabled True -ErrorAction SilentlyContinue
-          Write-Host "RDP enabled for mateusz"
+          Write-Host "RDP enabled for Mateusz"
 
       - name: Install Winget
         shell: powershell
-        continue-on-error: true
         run: |
-          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "Installing winget..."
-            Install-Script -Name winget-install -Force -Confirm:$false
-            winget-install -Force
-          } else {
-            Write-Host "Winget already installed."
-          }
+          Write-Host "Installing Winget..."
+
+          Invoke-WebRequest `
+            -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" `
+            -OutFile "$env:TEMP\winget.msixbundle"
+
+          Invoke-WebRequest `
+            -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/DesktopAppInstaller_Dependencies.zip" `
+            -OutFile "$env:TEMP\deps.zip"
+
+          Expand-Archive "$env:TEMP\deps.zip" "$env:TEMP\deps" -Force
+
+          Add-AppxPackage "$env:TEMP\deps\x64\Microsoft.VCLibs.x64.14.00.Desktop.appx"
+
+          Add-AppxPackage "$env:TEMP\winget.msixbundle"
+
+          Start-Sleep -Seconds 10
+
+          winget --version
 
       - name: Optimize RDP Performance
         shell: powershell
