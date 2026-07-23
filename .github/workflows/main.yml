@@ -1,0 +1,266 @@
+name: Windows VPS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  vps:
+    runs-on: windows-2025
+
+    steps:
+
+    - name: Configure RDP
+      shell: powershell
+      run: |
+        net user runneradmin Password123!
+
+        Set-ItemProperty `
+          -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+          -Name "fDenyTSConnections" `
+          -Value 0
+
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+        Write-Host "RDP enabled"
+
+
+    - name: Optimize RDP Performance
+      shell: powershell
+      run: |
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableAudioCapture /t REG_DWORD /d 1 /f
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableCam /t REG_DWORD /d 1 /f
+
+        Write-Host "RDP optimized"
+
+
+    - name: Disable WSL
+      shell: powershell
+      continue-on-error: true
+      run: |
+        dism.exe /online /disable-feature /featurename:Microsoft-Windows-Subsystem-Linux /norestart
+        dism.exe /online /disable-feature /featurename:VirtualMachinePlatform /norestart
+
+        Write-Host "WSL disabled"
+
+
+    - name: Set Dark Mode
+      shell: powershell
+      run: |
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v AppsUseLightTheme /t REG_DWORD /d 0 /f
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v SystemUsesLightTheme /t REG_DWORD /d 0 /f
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v EnableTransparency /t REG_DWORD /d 0 /f
+
+        Write-Host "Dark mode enabled"
+
+
+    - name: Create Black Wallpaper
+      shell: powershell
+      run: |
+        Add-Type -AssemblyName System.Drawing
+
+        $path="$env:USERPROFILE\black.bmp"
+
+        $bmp=New-Object System.Drawing.Bitmap 1920,1080
+        $gfx=[System.Drawing.Graphics]::FromImage($bmp)
+
+        $gfx.Clear([System.Drawing.Color]::Black)
+
+        $bmp.Save($path)
+
+        $gfx.Dispose()
+        $bmp.Dispose()
+
+        reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d $path /f
+
+
+    - name: Refresh Explorer
+      shell: powershell
+      run: |
+        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+        Start-Sleep 3
+        Start-Process explorer.exe
+
+
+    - name: Remove Software
+      shell: powershell
+      continue-on-error: true
+      run: |
+
+        # Add direct uninstall EXE paths here
+        $uninstallPaths = @(
+          "C:\Program Files\Unity Hub\Uninstall Unity Hub.exe",
+          "C:\Program Files\R\R-4.6.1\unins000.exe",
+          "C:\rtools45\unins000.exe"
+        )
+
+
+        foreach($path in $uninstallPaths){
+
+          if(Test-Path $path){
+
+            Write-Host "Uninstalling $path"
+
+            Start-Process $path `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" `
+            -Wait
+
+          }
+          else{
+
+            Write-Host "Not found $path"
+
+          }
+        }
+
+
+
+        # Add winget names here
+        $apps=@(
+          "Google Chrome",
+          "CMake",
+          "Inno Setup 6",
+          "Blend for Visual Studio",
+          "MySQL",
+          "Node.js",
+          "Microsoft Visual Studio",
+          "Git",
+          "Microsoft Web Platform Installer",
+          "ImageMagick",
+          "Web Pages",
+          "OpenSSL",
+          "Microsoft Azure Service Fabric SDK", 
+          "MongoDB Server", 
+          "Windows Subsystem for Linux", 
+          "Feedback Hub", 
+          "PostgreSQL 17", 
+          "StrawberryPerl ", 
+          "MongoDB Shell", 
+          "AWS SAM Command Line Interface", 
+          "AWS Command Line Interface v2", 
+          "IIS 10.0 Express", 
+          "Wix Toolset v3.14.1.8722", 
+          "sbt 1.12.12", 
+          "Windows SDK AddOn", 
+          "Windows Security"
+          
+        )
+
+
+        foreach($app in $apps){
+
+          Write-Host "Removing $app"
+
+          winget uninstall "$app" `
+          --accept-source-agreements `
+          --silent `
+          --disable-interactivity
+
+        }
+
+
+    - name: Remove Edge
+      shell: powershell
+      continue-on-error: true
+      run: |
+
+        $edge=Get-ChildItem `
+          "C:\Program Files (x86)\Microsoft\Edge\Application" `
+          -Recurse `
+          -Filter setup.exe `
+          -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+
+
+        if($edge){
+
+          Start-Process $edge.FullName `
+          -ArgumentList "--uninstall --system-level --force-uninstall" `
+          -Wait
+
+        }
+
+
+    - name: Install Tailscale
+      shell: powershell
+      run: |
+
+        winget install --id Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements
+
+        Start-Sleep 15
+
+        & "C:\Program Files\Tailscale\tailscale.exe" version
+
+
+    - name: Connect Tailscale
+      shell: powershell
+      run: |
+
+        & "C:\Program Files\Tailscale\tailscale.exe" up `
+        --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
+
+
+    - name: Show Tailscale IP
+      shell: powershell
+      run: |
+
+        Start-Sleep 10
+
+        Write-Host "Tailscale IP:"
+        & "C:\Program Files\Tailscale\tailscale.exe" ip
+
+
+    - name: Install Roblox Studio
+      shell: powershell
+      run: |
+
+        $installer="$env:TEMP\RobloxStudioInstaller.exe"
+
+
+        Invoke-WebRequest `
+        -Uri "https://setup.rbxcdn.com/RobloxStudioInstaller.exe" `
+        -OutFile $installer
+
+
+        Start-Process $installer
+
+
+        $timeout=600
+        $time=0
+
+
+        while($time -lt $timeout){
+
+          $studio=Get-ChildItem `
+          "$env:LOCALAPPDATA\Roblox\Versions" `
+          -Recurse `
+          -Filter RobloxStudioBeta.exe `
+          -ErrorAction SilentlyContinue
+
+
+          if($studio){
+
+            Write-Host "Roblox Studio installed:"
+            Write-Host $studio.FullName
+
+            break
+
+          }
+
+
+          Start-Sleep 10
+          $time+=10
+
+        }
+
+
+    - name: Keep Alive
+      shell: powershell
+      run: |
+
+        while($true){
+
+          Write-Host "Windows VPS running..."
+
+          Start-Sleep 300
+
+        }
