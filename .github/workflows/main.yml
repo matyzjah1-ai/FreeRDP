@@ -8,13 +8,28 @@ jobs:
     runs-on: windows-2022
 
     steps:
-      - name: Configure RDP
+      - name: Configure RDP Credentials
         shell: powershell
         run: |
-          net user runneradmin Password123!
+          if ('AdminMateusz' -ne 'runneradmin') {
+            Rename-LocalUser -Name 'runneradmin' -NewName 'AdminMateusz'
+          }
+          net user AdminMateusz Password123321
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
           Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
-          Write-Host "RDP enabled"
+          Write-Host "RDP enabled for AdminMateusz"
+
+      - name: Install Winget
+        shell: powershell
+        continue-on-error: true
+        run: |
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing winget..."
+            Install-Script -Name winget-install -Force -Confirm:$false
+            winget-install -Force
+          } else {
+            Write-Host "Winget already installed."
+          }
 
       - name: Optimize RDP Performance
         shell: powershell
@@ -23,7 +38,7 @@ jobs:
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableCam /t REG_DWORD /d 1 /f
           Write-Host "RDP optimized"
 
-      - name: Debloat System (Remove Pre-installed Packages)
+      - name: Debloat System
         shell: powershell
         continue-on-error: true
         run: |
@@ -38,7 +53,6 @@ jobs:
               Start-Process $path -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
             }
           }
-          Get-AppxPackage -AllUsers | Where-Object {$_.Name -like "*Xbox*" -or $_.Name -like "*Bing*"} | Remove-AppxPackage -ErrorAction SilentlyContinue
 
       - name: Set Solid Black Wallpaper
         shell: powershell
