@@ -11,13 +11,60 @@ jobs:
       - name: Configure RDP Credentials
         shell: powershell
         run: |
-          if ('mateusz' -ne 'runneradmin') {
-            Rename-LocalUser -Name 'runneradmin' -NewName 'mateusz'
+          if ('Mateusz' -ne 'runneradmin') {
+            Rename-LocalUser -Name 'runneradmin' -NewName 'Mateusz'
           }
-          net user mateusz Password123!
+          net user Mateusz Password123!
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
           Set-NetFirewallRule -Name 'RemoteDesktop-UserMode-In-TCP' -Enabled True -ErrorAction SilentlyContinue
-          Write-Host "RDP enabled for mateusz"
+          Write-Host "RDP enabled for Mateusz"
+
+      - name: Install Winget
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $WorkDir = Join-Path $env:TEMP 'winget-install'
+          $DepsDir = Join-Path $WorkDir 'DesktopAppInstaller_Dependencies'
+          New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+
+          # Get latest stable WinGet release assets
+          $Release = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
+          $MsixBundle = $Release.assets | Where-Object { $_.name -eq 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle' } | Select-Object -First 1
+          $DependenciesZip = $Release.assets | Where-Object { $_.name -eq 'DesktopAppInstaller_Dependencies.zip' } | Select-Object -First 1
+          $LicenseFile = $Release.assets | Where-Object { $_.name -like '*_License1.xml' } | Select-Object -First 1
+
+          if (-not $MsixBundle -or -not $DependenciesZip -or -not $LicenseFile) {
+              throw 'Could not find all required WinGet release assets.'
+          }
+
+          $MsixBundlePath = Join-Path $WorkDir 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
+          $DependenciesZipPath = Join-Path $WorkDir 'DesktopAppInstaller_Dependencies.zip'
+          $LicensePath = Join-Path $WorkDir 'license.xml'
+
+          # Download release packages
+          Invoke-WebRequest -Uri $MsixBundle.browser_download_url -OutFile $MsixBundlePath
+          Invoke-WebRequest -Uri $DependenciesZip.browser_download_url -OutFile $DependenciesZipPath
+          Invoke-WebRequest -Uri $LicenseFile.browser_download_url -OutFile $LicensePath
+
+          # Extract dependencies
+          Expand-Archive -Path $DependenciesZipPath -DestinationPath $DepsDir -Force
+          $DependencyPath = Join-Path $DepsDir 'x64'
+          $DepFiles = Get-ChildItem -Path $DependencyPath -File | Where-Object { $_.Extension -in '.appx', '.msix' } | Select-Object -ExpandProperty FullName
+
+          # System-wide provision via DISM
+          Add-AppxProvisionedPackage -Online -PackagePath $MsixBundlePath -LicensePath $LicensePath -DependencyPackagePath $DepFiles
+          Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction SilentlyContinue
+
+          # Refresh Session PATH
+          $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
+
+          # Verify winget or locate direct binary path if not added to env PATH yet
+          $wingetExe = Get-Command winget -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if (-not $wingetExe) {
+              $wingetExe = (Get-ChildItem -Path "$env:ProgramFiles\WindowsApps" -Filter "winget.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          }
+          if ($wingetExe) { & $wingetExe --info } else { Write-Host 'WinGet installed successfully (PATH will refresh on next login).' }
 
       - name: Optimize RDP Performance
         shell: powershell
@@ -66,19 +113,33 @@ jobs:
           Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-full-1.98.9.exe" -OutFile $tsInstaller
           Start-Process -FilePath $tsInstaller -ArgumentList "/quiet /norestart" -Wait
           Start-Sleep 5
-          & "C:\Program Files\Tailscale\tailscale.exe" version
+          $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
+          $tsExe = Get-Command tailscale -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if (-not $tsExe) {
+              $tsExe = @("C:\Program Files\Tailscale\tailscale.exe", "C:\Program Files (x86)\Tailscale\tailscale.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $tsExe) { throw 'Tailscale executable could not be located after installation.' }
+          & $tsExe version
 
       - name: Connect Tailscale
         shell: powershell
         run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
+          $tsExe = Get-Command tailscale -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if (-not $tsExe) {
+              $tsExe = @("C:\Program Files\Tailscale\tailscale.exe", "C:\Program Files (x86)\Tailscale\tailscale.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
 
       - name: Show Tailscale IP
         shell: powershell
         run: |
           Start-Sleep 5
+          $tsExe = Get-Command tailscale -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if (-not $tsExe) {
+              $tsExe = @("C:\Program Files\Tailscale\tailscale.exe", "C:\Program Files (x86)\Tailscale\tailscale.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
           Write-Host "Tailscale IP:"
-          & "C:\Program Files\Tailscale\tailscale.exe" ip
+          & $tsExe ip
 
       - name: Install Firefox
         shell: powershell
