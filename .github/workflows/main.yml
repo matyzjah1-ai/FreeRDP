@@ -19,35 +19,6 @@ jobs:
           Set-NetFirewallRule -Name 'RemoteDesktop-UserMode-In-TCP' -Enabled True -ErrorAction SilentlyContinue
           Write-Host "RDP enabled for Mateusz"
 
-      - name: Install Winget
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          $downloadDir = 'C:\WinGetInstall'
-          if (-not (Test-Path $downloadDir)) { New-Item -Path $downloadDir -ItemType Directory | Out-Null }
-          Push-Location $downloadDir
-
-          # Download dependencies & winget
-          Invoke-WebRequest -Uri 'https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx' -OutFile 'vclibs.appx'
-          Invoke-WebRequest -Uri 'https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx' -OutFile 'xaml.appx'
-          Invoke-WebRequest -Uri 'https://aka.ms/getwinget' -OutFile 'winget.msixbundle'
-
-          # Fetch matching license file for DISM provisioning
-          $releasesUri = 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
-          $licenseUrl = ((Invoke-RestMethod -Uri $releasesUri).assets | Where-Object name -like '*.xml').browser_download_url
-          Invoke-WebRequest -Uri $licenseUrl -OutFile 'license.xml'
-
-          # System-wide provision via DISM
-          $deps = @("$downloadDir\vclibs.appx", "$downloadDir\xaml.appx")
-          Add-AppxProvisionedPackage -Online -PackagePath "$downloadDir\winget.msixbundle" -LicensePath "$downloadDir\license.xml" -DependencyPackagePath $deps
-          Add-AppxPackage -RegisterByFamilyName -MainPackage 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe' -ErrorAction SilentlyContinue
-
-          # Refresh Session PATH
-          $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
-          Pop-Location
-          Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
-
       - name: Optimize RDP Performance
         shell: powershell
         run: |
