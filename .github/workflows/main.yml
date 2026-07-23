@@ -5,7 +5,7 @@ on:
 
 jobs:
   vps:
-    runs-on: windows-2025
+    runs-on: windows-2019
 
     steps:  
       - name: Configure RDP  
