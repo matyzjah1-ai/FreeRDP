@@ -11,13 +11,13 @@ jobs:
       - name: Configure RDP Credentials
         shell: powershell
         run: |
-          if ('Mateusz' -ne 'runneradmin') {
-            Rename-LocalUser -Name 'runneradmin' -NewName 'Mateusz'
+          if ('mateusz' -ne 'runneradmin') {
+            Rename-LocalUser -Name 'runneradmin' -NewName 'mateusz'
           }
-          net user Mateusz Password123!
+          net user mateusz Password123!
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
           Set-NetFirewallRule -Name 'RemoteDesktop-UserMode-In-TCP' -Enabled True -ErrorAction SilentlyContinue
-          Write-Host "RDP enabled for Mateusz"
+          Write-Host "RDP enabled for mateusz"
 
       - name: Install Winget
         shell: powershell
