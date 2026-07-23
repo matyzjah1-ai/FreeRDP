@@ -5,88 +5,84 @@ on:
 
 jobs:
   vps:
-    runs-on: windows-2019
+    runs-on: windows-2025
 
-    steps:  
-      - name: Configure RDP  
-        shell: powershell  
-        run: |  
-          net user Studio Mateusz123 /add
+    steps:
+      - name: Configure RDP
+        shell: powershell
+        run: |
+          net user Studio "Mateusz123" /add
           net localgroup Administrators Studio /add
-          net user Studio Mateusz123
+          Set-ItemProperty -Path 'HKLM:/System/CurrentControlSet/Control/Terminal Server' -Name 'fDenyTSConnections' -Value 0
+          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+          Write-Host "RDP configured for user: Studio"
 
-          Set-ItemProperty `  
-            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `  
-            -Name "fDenyTSConnections" `  
-            -Value 0  
+      - name: Optimize RDP Performance
+        shell: powershell
+        run: |
+          Set-ItemProperty -Path 'HKLM:/SYSTEM/CurrentControlSet/Control/Terminal Server/WinStations/RDP-Tcp' -Name 'fDisableAudioCapture' -Value 1
+          Set-ItemProperty -Path 'HKLM:/SYSTEM/CurrentControlSet/Control/Terminal Server/WinStations/RDP-Tcp' -Name 'fDisableCam' -Value 1
+          Write-Host "RDP optimized"
 
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"  
-          Write-Host "RDP configured for user: Studio"  
+      - name: Set Dark Mode
+        shell: powershell
+        run: |
+          Set-ItemProperty -Path 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Themes/Personalize' -Name 'AppsUseLightTheme' -Value 0
+          Set-ItemProperty -Path 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Themes/Personalize' -Name 'SystemUsesLightTheme' -Value 0
+          Write-Host "Dark mode enabled"
 
-      - name: Optimize RDP Performance  
-        shell: powershell  
-        run: |  
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableAudioCapture /t REG_DWORD /d 1 /f  
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableCam /t REG_DWORD /d 1 /f  
-          Write-Host "RDP optimized"  
+      - name: Install Tailscale
+        shell: powershell
+        run: |
+          winget install --id Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements
+          Start-Sleep 15
+          $tsPath = "$env:ProgramFiles/Tailscale/tailscale.exe"
+          Start-Process $tsPath -ArgumentList "version" -NoNewWindow -Wait
 
-      - name: Set Dark Mode  
-        shell: powershell  
-        run: |  
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v AppsUseLightTheme /t REG_DWORD /d 0 /f  
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v SystemUsesLightTheme /t REG_DWORD /d 0 /f  
-          Write-Host "Dark mode enabled"  
+      - name: Connect Tailscale
+        shell: powershell
+        run: |
+          $tsPath = "$env:ProgramFiles/Tailscale/tailscale.exe"
+          Start-Process $tsPath -ArgumentList "up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}" -NoNewWindow -Wait
 
-      - name: Install Tailscale  
-        shell: powershell  
-        run: |  
-          winget install --id Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements  
-          Start-Sleep 15  
-          & "C:\Program Files\Tailscale\tailscale.exe" version  
+      - name: Show Tailscale IP
+        shell: powershell
+        run: |
+          Start-Sleep 10
+          Write-Host "Tailscale IP:"
+          $tsPath = "$env:ProgramFiles/Tailscale/tailscale.exe"
+          Start-Process $tsPath -ArgumentList "ip" -NoNewWindow -Wait
 
-      - name: Connect Tailscale  
-        shell: powershell  
-        run: |  
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}  
+      - name: Install Roblox Studio
+        shell: powershell
+        run: |
+          $installer = "$env:TEMP/RobloxStudioInstaller.exe"
+          Invoke-WebRequest -Uri "https://setup.rbxcdn.com/RobloxStudioInstaller.exe" -OutFile $installer
+          Start-Process $installer
+          $timeout = 600
+          $time = 0
+          while ($time -lt $timeout) {
+            $studio = Get-ChildItem "$env:LOCALAPPDATA/Roblox/Versions" -Recurse -Filter RobloxStudioBeta.exe -ErrorAction SilentlyContinue
+            if ($studio) {
+              Write-Host "Roblox Studio installed: $($studio.FullName)"
+              break
+            }
+            Start-Sleep 10
+            $time += 10
+          }
 
-      - name: Show Tailscale IP  
-        shell: powershell  
-        run: |  
-          Start-Sleep 10  
-          Write-Host "Tailscale IP:"  
-          & "C:\Program Files\Tailscale\tailscale.exe" ip  
+      - name: Install Apps via Winget
+        shell: powershell
+        run: |
+          winget install --id Mozilla.Firefox --silent --accept-package-agreements --accept-source-agreements
+          winget install --id OBSProject.OBSStudio --silent --accept-package-agreements --accept-source-agreements
+          winget install --id Discord.Discord --silent --accept-package-agreements --accept-source-agreements
+          winget install --id Notepad++.Notepad++ --silent --accept-package-agreements --accept-source-agreements
 
-- name: Install Roblox Studio
-  shell: powershell
-  run: |
-    $installer="$env:TEMP\RobloxStudioInstaller.exe"
-    Invoke-WebRequest -Uri "https://setup.rbxcdn.com/RobloxStudioInstaller.exe" -OutFile $installer
-    Start-Process $installer
-    $timeout=600
-    $time=0
-    while($time -lt $timeout){
-      $studio=Get-ChildItem "$env:LOCALAPPDATA\Roblox\Versions" -Recurse -Filter RobloxStudioBeta.exe -ErrorAction SilentlyContinue
-      if($studio){
-        Write-Host "Roblox Studio installed:"
-        Write-Host $studio.FullName
-        break
-      }
-      Start-Sleep 10
-      $time+=10
-    }
-
-- name: Install Apps via Winget
-  shell: powershell
-  run: |
-    winget install --id Mozilla.Firefox --silent --accept-package-agreements --accept-source-agreements
-    winget install --id OBSProject.OBSStudio --silent --accept-package-agreements --accept-source-agreements
-    winget install --id Discord.Discord --silent --accept-package-agreements --accept-source-agreements
-    winget install --id Notepad++.Notepad++ --silent --accept-package-agreements --accept-source-agreements
-
-      - name: Keep Alive  
-        shell: powershell  
-        run: |  
-          while($true){  
-            Write-Host "Windows VPS running..."  
-            Start-Sleep 300  
+      - name: Keep Alive
+        shell: powershell
+        run: |
+          while ($true) {
+            Write-Host "Windows VPS running..."
+            Start-Sleep 300
           }
