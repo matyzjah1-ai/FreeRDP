@@ -5,7 +5,7 @@ on:
 
 jobs:
   vps:
-    runs-on: macos-16
+    runs-on: macos-15
 
     steps:
       - name: Install Tailscale
