@@ -1,12 +1,12 @@
-name: macOS Tahoe VNC Remote Desktop
+name: macOS Remote Desktop
 
 on:
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   remote-desktop:
-    runs-on: macos-26 # macOS Tahoe
-    timeout-minutes: 120 # Keeps job alive for up to 2 hours
+    runs-on: macos-15 # (Note: GitHub uses macos-14 / macos-15 for modern macOS images)
+    timeout-minutes: 120
 
     steps:
       - name: Checkout Code
@@ -14,8 +14,8 @@ jobs:
 
       - name: Set Runner User Password & Enable VNC
         run: |
-          # 1. Set password for the runner user (Required for VNC & Sudo)
-          echo "runner:Password123!" | sudo chpasswd
+          # 1. Set password for the runner user using macOS native tool 'dscl'
+          sudo dscl . -passwd /Users/runner Password123!
           
           # 2. Enable built-in macOS Screen Sharing / VNC
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
@@ -35,7 +35,7 @@ jobs:
         run: |
           TS_IP=$(tailscale ip -4)
           echo "=========================================================="
-          echo " macOS Tahoe VNC Server Ready!"
+          echo " macOS VNC Server Ready!"
           echo " Tailscale IP: $TS_IP"
           echo " VNC Address:  vnc://$TS_IP"
           echo " Username:     runner"
@@ -45,5 +45,4 @@ jobs:
       - name: Keep Runner Alive
         run: |
           echo "Waiting for remote desktop session..."
-          # Sleep loop to keep the workflow running
           sleep 7200
