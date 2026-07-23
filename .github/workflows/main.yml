@@ -1,433 +1,94 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub VM Script Generator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col items-center py-10 px-4">
+name: Windows VPS
 
-    <div class="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-        
-        <!-- Header -->
-        <div class="bg-slate-850 border-b border-slate-800 p-6 text-center">
-            <h1 class="text-2xl font-bold tracking-tight text-white flex items-center justify-center gap-3">
-                <i class="fa-solid fa-terminal text-blue-500"></i> Github VM Script Generator
-            </h1>
-            <p class="text-slate-400 text-sm mt-1">Generate automated workflow scripts for self-hosted cloud environments via GitHub Actions.</p>
-        </div>
+on:
+  workflow_dispatch:
 
-        <div class="p-8 space-y-8">
+jobs:
+  vps:
+    runs-on: windows-2022
 
-            <!-- Step 1: OS Selection -->
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-3">1. Pick Your Preferred OS</label>
-                <div class="grid grid-cols-3 gap-4">
-                    <button type="button" id="btn-windows" onclick="selectOS('windows')" class="os-btn flex flex-col items-center justify-center p-4 rounded-xl border border-blue-500 bg-blue-950/40 transition-all cursor-pointer">
-                        <i class="fa-brands fa-windows text-3xl mb-2 text-blue-400"></i>
-                        <span class="font-medium text-sm">Windows</span>
-                    </button>
-                    <button type="button" id="btn-macos" onclick="selectOS('macos')" class="os-btn flex flex-col items-center justify-center p-4 rounded-xl border border-slate-700 bg-slate-800 hover:border-blue-500 transition-all cursor-pointer">
-                        <i class="fa-brands fa-apple text-3xl mb-2 text-slate-200"></i>
-                        <span class="font-medium text-sm">macOS</span>
-                    </button>
-                    <button type="button" id="btn-linux" onclick="selectOS('linux')" class="os-btn flex flex-col items-center justify-center p-4 rounded-xl border border-slate-700 bg-slate-800 hover:border-blue-500 transition-all cursor-pointer">
-                        <i class="fa-brands fa-linux text-3xl mb-2 text-slate-200"></i>
-                        <span class="font-medium text-sm">Linux</span>
-                    </button>
-                </div>
-            </div>
+    steps:
+      - name: Configure RDP
+        shell: powershell
+        run: |
+          net user runneradmin Password123!
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+          Write-Host "RDP enabled"
 
-            <!-- Step 2: Version Selection -->
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">2. Pick your Version</label>
-                <select id="os-version" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 text-slate-200 cursor-pointer">
-                </select>
-            </div>
+      - name: Optimize RDP Performance
+        shell: powershell
+        run: |
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableAudioCapture /t REG_DWORD /d 1 /f
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v fDisableCam /t REG_DWORD /d 1 /f
+          Write-Host "RDP optimized"
 
-            <!-- Windows Credentials Step -->
-            <div id="windows-creds-container" class="bg-slate-950/50 border border-slate-800/80 rounded-xl p-5 space-y-4">
-                <label class="block text-sm font-medium text-slate-300">RDP Account Credentials & System Options</label>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Username</label>
-                        <input type="text" id="win-user" value="runneradmin" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-slate-200" placeholder="Username">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Password</label>
-                        <input type="text" id="win-pass" value="Password123!" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-slate-200" placeholder="Password">
-                    </div>
-                </div>
-                <div class="pt-2 border-t border-slate-800/60 space-y-2">
-                    <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
-                        <input type="checkbox" id="win-debloat" checked class="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
-                        <span>Debloat Windows (Remove Unity Hub, heavy runtimes, unused SDKs)</span>
-                    </label>
-                    <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
-                        <input type="checkbox" id="win-black-wallpaper" checked class="rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
-                        <span>Set Solid Black Wallpaper (Faster RDP)</span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Step 3: Remote Provider Setup -->
-            <div class="bg-slate-950/50 border border-slate-800/80 rounded-xl p-5 space-y-4">
-                <label class="block text-sm font-medium text-slate-300">3. Remote Connection Provider</label>
-                <div class="flex items-center gap-2 text-sm text-slate-300 font-medium">
-                    <span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> Tailscale
-                </div>
-                <div class="text-xs text-slate-400 space-y-2 bg-slate-900 p-4 rounded-lg border border-slate-800">
-                    <p class="font-semibold text-slate-200">Setup Process:</p>
-                    <ol class="list-decimal list-inside space-y-1.5 text-slate-300">
-                        <li>Get your API / Auth Token from your Tailscale console.</li>
-                        <li>Ensure key settings are set to:
-                            <ul class="list-disc list-inside pl-4 text-slate-400 mt-0.5">
-                                <li><strong>Reusable</strong></li>
-                                <li><strong>Ephemeral</strong></li>
-                            </ul>
-                        </li>
-                        <li>Go to your GitHub Repository &rarr; <strong>Settings</strong> &rarr; <strong>Secrets and variables</strong> &rarr; <strong>Actions</strong>.</li>
-                        <li>Create a <strong>New repository secret</strong> named <code class="bg-slate-800 text-blue-400 px-1.5 py-0.5 rounded border border-slate-700">TAILSCALE_AUTH_KEY</code> and paste your key value there.</li>
-                    </ol>
-                </div>
-            </div>
-
-            <!-- Step 4: Choose Apps -->
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-3">4. Choose apps to install</label>
-                <div class="grid grid-cols-2 gap-3">
-                    <label class="flex items-center space-x-3 p-3 bg-slate-800 border border-slate-700 rounded-xl cursor-pointer hover:border-slate-600">
-                        <input type="checkbox" value="firefox" checked class="app-checkbox rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
-                        <span class="text-sm">Firefox</span>
-                    </label>
-                    <label class="flex items-center space-x-3 p-3 bg-slate-800 border border-slate-700 rounded-xl cursor-pointer hover:border-slate-600">
-                        <input type="checkbox" value="roblox" class="app-checkbox rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
-                        <span class="text-sm">Roblox Studio</span>
-                    </label>
-                    <label class="flex items-center space-x-3 p-3 bg-slate-800 border border-slate-700 rounded-xl cursor-pointer hover:border-slate-600">
-                        <input type="checkbox" value="obs" class="app-checkbox rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
-                        <span class="text-sm">OBS Studio</span>
-                    </label>
-                    <label class="flex items-center space-x-3 p-3 bg-slate-800 border border-slate-700 rounded-xl cursor-pointer hover:border-slate-600">
-                        <input type="checkbox" value="notepadpp" class="app-checkbox rounded border-slate-700 text-blue-600 focus:ring-blue-500 bg-slate-900">
-                        <span class="text-sm">Notepad++</span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Action Button -->
-            <button type="button" onclick="generateScript()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 cursor-pointer">
-                [ Generate Script ]
-            </button>
-
-            <!-- Output Section -->
-            <div id="output-section" class="hidden space-y-4 pt-4 border-t border-slate-800">
-                <div class="bg-emerald-950/40 border border-emerald-800/60 rounded-xl p-4 text-emerald-300 text-sm space-y-1">
-                    <p class="font-bold">Script Generated Successfully!</p>
-                    <p class="text-slate-300 text-xs">Copy this script into <code id="workflow-filename" class="text-amber-300">windows-vps.yml</code> inside your repository's <code class="text-amber-300">.github/workflows/</code> folder.</p>
-                </div>
-
-                <div class="relative">
-                    <div class="flex items-center justify-end bg-slate-950 px-4 py-2 border border-slate-800 rounded-t-xl text-xs text-slate-400">
-                        <button type="button" onclick="copyScript()" class="hover:text-white flex items-center gap-1.5 cursor-pointer bg-slate-800 px-2.5 py-1 rounded border border-slate-700">
-                            <i class="fa-regular fa-copy"></i> Copy
-                        </button>
-                    </div>
-                    <pre id="script-output" class="bg-slate-950 p-4 rounded-b-xl border-x border-b border-slate-800 text-xs text-slate-300 overflow-x-auto font-mono max-h-96"></pre>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <script>
-        var versions = {
-            windows: [
-                { name: 'Windows Server 2025', value: 'windows-2025' },
-                { name: 'Windows Server 2022', value: 'windows-2022' },
-                { name: 'Windows Server 2019', value: 'windows-2019' }
-            ],
-            macos: [
-                { name: 'macOS 26 (Tahoe)', value: 'macos-26' },
-                { name: 'macOS 15 (Sequoia)', value: 'macos-15' },
-                { name: 'macOS 14 (Sonoma)', value: 'macos-14' },
-                { name: 'macOS 13 (Ventura)', value: 'macos-13' }
-            ],
-            linux: [
-                { name: 'Ubuntu 24.04 LTS', value: 'ubuntu-24.04' },
-                { name: 'Ubuntu 22.04 Minimal', value: 'ubuntu-22.04-minimal' },
-                { name: 'Ubuntu 20.04 LTS', value: 'ubuntu-20.04' }
-            ]
-        };
-
-        var currentOS = 'windows';
-
-        function selectOS(os) {
-            currentOS = os;
-
-            var buttons = document.querySelectorAll('.os-btn');
-            for (var i = 0; i < buttons.length; i++) {
-                buttons[i].classList.remove('border-blue-500', 'bg-blue-950/40');
-                buttons[i].classList.add('border-slate-700', 'bg-slate-800');
+      - name: Debloat System (Remove Pre-installed Packages)
+        shell: powershell
+        continue-on-error: true
+        run: |
+          Write-Host "Debloating runner environment..."
+          $uninstallPaths = @(
+            "C:\Program Files\Unity Hub\Uninstall Unity Hub.exe",
+            "C:\Program Files\R\R-4.6.1\unins000.exe",
+            "C:\rtools45\unins000.exe"
+          )
+          foreach($path in $uninstallPaths){
+            if(Test-Path $path){
+              Start-Process $path -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
             }
+          }
+          Get-AppxPackage -AllUsers | Where-Object {$_.Name -like "*Xbox*" -or $_.Name -like "*Bing*"} | Remove-AppxPackage -ErrorAction SilentlyContinue
 
-            var selectedBtn = document.getElementById('btn-' + os);
-            if (selectedBtn) {
-                selectedBtn.classList.remove('border-slate-700', 'bg-slate-800');
-                selectedBtn.classList.add('border-blue-500', 'bg-blue-950/40');
-            }
+      - name: Set Solid Black Wallpaper
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $path="$env:USERPROFILE\black.bmp"
+          $bmp=New-Object System.Drawing.Bitmap 1920,1080
+          $gfx=[System.Drawing.Graphics]::FromImage($bmp)
+          $gfx.Clear([System.Drawing.Color]::Black)
+          $bmp.Save($path)
+          $gfx.Dispose()
+          $bmp.Dispose()
+          reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d $path /f
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+          Start-Sleep 2
+          Start-Process explorer.exe
 
-            var credsContainer = document.getElementById('windows-creds-container');
-            if (os === 'windows') {
-                credsContainer.classList.remove('hidden');
-            } else {
-                credsContainer.classList.add('hidden');
-            }
+      - name: Install Tailscale Direct
+        shell: powershell
+        run: |
+          $tsInstaller = "$env:TEMP\tailscale-setup.exe"
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-full-1.98.9.exe" -OutFile $tsInstaller
+          Start-Process -FilePath $tsInstaller -ArgumentList "/quiet /norestart" -Wait
+          Start-Sleep 5
+          & "C:\Program Files\Tailscale\tailscale.exe" version
 
-            var versionSelect = document.getElementById('os-version');
-            versionSelect.innerHTML = '';
-            var list = versions[os] || [];
-            for (var j = 0; j < list.length; j++) {
-                var opt = document.createElement('option');
-                opt.value = list[j].value;
-                opt.textContent = list[j].name;
-                versionSelect.appendChild(opt);
-            }
-        }
+      - name: Connect Tailscale
+        shell: powershell
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
 
-        function generateWindowsYaml(runner, apps, username, password, debloat, blackBg) {
-            var lines = [
-                "name: Windows VPS",
-                "",
-                "on:",
-                "  workflow_dispatch:",
-                "",
-                "jobs:",
-                "  vps:",
-                "    runs-on: " + runner,
-                "",
-                "    steps:",
-                "      - name: Configure RDP User",
-                "        shell: powershell",
-                "        run: |",
-                "          if (Get-LocalUser -Name '" + username + "' -ErrorAction SilentlyContinue) {",
-                "            net user " + username + " " + password,
-                "          } else {",
-                "            net user " + username + " " + password + " /add",
-                "            net localgroup Administrators " + username + " /add",
-                "          }",
-                "          Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server' -Name 'fDenyTSConnections' -Value 0",
-                "          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'",
-                "          Write-Host \"RDP enabled for " + username + "\"",
-                "",
-                "      - name: Optimize RDP Performance",
-                "        shell: powershell",
-                "        run: |",
-                "          reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v fDisableAudioCapture /t REG_DWORD /d 1 /f",
-                "          reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v fDisableCam /t REG_DWORD /d 1 /f",
-                "          Write-Host \"RDP optimized\""
-            ];
+      - name: Show Tailscale IP
+        shell: powershell
+        run: |
+          Start-Sleep 5
+          Write-Host "Tailscale IP:"
+          & "C:\Program Files\Tailscale\tailscale.exe" ip
 
-            if (debloat) {
-                lines.push("");
-                lines.push("      - name: Debloat System");
-                lines.push("        shell: powershell");
-                lines.push("        continue-on-error: true");
-                lines.push("        run: |");
-                lines.push("          Write-Host \"Debloating runner environment...\"");
-                lines.push("          $uninstallPaths = @(");
-                lines.push("            \"C:\\Program Files\\Unity Hub\\Uninstall Unity Hub.exe\",");
-                lines.push("            \"C:\\Program Files\\R\\R-4.6.1\\unins000.exe\",");
-                lines.push("            \"C:\\rtools45\\unins000.exe\"");
-                lines.push("          )");
-                lines.push("          foreach($path in $uninstallPaths){");
-                lines.push("            if(Test-Path $path){");
-                lines.push("              Start-Process $path -ArgumentList \"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART\" -Wait");
-                lines.push("            }");
-                lines.push("          }");
-            }
+      - name: Install Firefox
+        shell: powershell
+        run: |
+          $ff = "$env:TEMP\firefox.exe"
+          Invoke-WebRequest -Uri "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US" -OutFile $ff
+          Start-Process $ff -ArgumentList "-ms" -Wait
 
-            if (blackBg) {
-                lines.push("");
-                lines.push("      - name: Set Solid Black Wallpaper");
-                lines.push("        shell: powershell");
-                lines.push("        run: |");
-                lines.push("          Add-Type -AssemblyName System.Drawing");
-                lines.push("          $path=\"$env:USERPROFILE\\black.bmp\"");
-                lines.push("          $bmp=New-Object System.Drawing.Bitmap 1920,1080");
-                lines.push("          $gfx=[System.Drawing.Graphics]::FromImage($bmp)");
-                lines.push("          $gfx.Clear([System.Drawing.Color]::Black)");
-                lines.push("          $bmp.Save($path)");
-                lines.push("          $gfx.Dispose()");
-                lines.push("          $bmp.Dispose()");
-                lines.push("          reg add \"HKCU\\Control Panel\\Desktop\" /v Wallpaper /t REG_SZ /d $path /f");
-                lines.push("          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue");
-                lines.push("          Start-Sleep 2");
-                lines.push("          Start-Process explorer.exe");
-            }
-
-            lines.push("");
-            lines.push("      - name: Install Tailscale Direct");
-            lines.push("        shell: powershell");
-            lines.push("        run: |");
-            lines.push("          $tsInstaller = \"$env:TEMP\\tailscale-setup.exe\"");
-            lines.push("          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12");
-            lines.push("          Invoke-WebRequest -Uri \"https://pkgs.tailscale.com/stable/tailscale-setup-full-1.98.9.exe\" -OutFile $tsInstaller");
-            lines.push("          Start-Process -FilePath $tsInstaller -ArgumentList \"/quiet /norestart\" -Wait");
-            lines.push("          Start-Sleep 5");
-            lines.push("          & \"C:\\Program Files\\Tailscale\\tailscale.exe\" version");
-            lines.push("");
-            lines.push("      - name: Connect Tailscale");
-            lines.push("        shell: powershell");
-            lines.push("        run: |");
-            lines.push("          & \"C:\\Program Files\\Tailscale\\tailscale.exe\" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}");
-            lines.push("");
-            lines.push("      - name: Show Tailscale IP");
-            lines.push("        shell: powershell");
-            lines.push("        run: |");
-            lines.push("          Start-Sleep 5");
-            lines.push("          Write-Host \"Tailscale IP:\"");
-            lines.push("          & \"C:\\Program Files\\Tailscale\\tailscale.exe\" ip");
-
-            if (apps.indexOf('firefox') !== -1) {
-                lines.push("");
-                lines.push("      - name: Install Firefox");
-                lines.push("        shell: powershell");
-                lines.push("        run: |");
-                lines.push("          $ff = \"$env:TEMP\\firefox.exe\"");
-                lines.push("          Invoke-WebRequest -Uri \"https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=en-US\" -OutFile $ff");
-                lines.push("          Start-Process $ff -ArgumentList \"-ms\" -Wait");
-            }
-
-            lines.push("");
-            lines.push("      - name: Keep Alive");
-            lines.push("        shell: powershell");
-            lines.push("        run: |");
-            lines.push("          while($true){");
-            lines.push("            Write-Host \"Windows VPS running...\"");
-            lines.push("            Start-Sleep 300");
-            lines.push("          }");
-
-            return lines.join("\n");
-        }
-
-        function generateMacosYaml(runner, apps) {
-            var lines = [
-                "name: macOS VM",
-                "",
-                "on:",
-                "  workflow_dispatch:",
-                "",
-                "jobs:",
-                "  vps:",
-                "    runs-on: " + runner,
-                "",
-                "    steps:",
-                "      - name: Enable VNC Remote Access",
-                "        run: |",
-                "          printf \"Password123!\\nPassword123!\\n\" | sudo passwd runner",
-                "          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \\",
-                "            -activate -configure -access -on \\",
-                "            -clientopts -setvnclegacy -vnclegacy yes \\",
-                "            -clientopts -setvncpw -vncpw Password123! \\",
-                "            -restart -agent -privs -all",
-                "",
-                "      - name: Install and Connect Tailscale",
-                "        run: |",
-                "          brew install tailscale",
-                "          sudo tailscaled &",
-                "          sleep 5",
-                "          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}",
-                "",
-                "      - name: Show Tailscale IP",
-                "        run: |",
-                "          tailscale ip",
-                "",
-                "      - name: Keep Alive",
-                "        run: |",
-                "          while true; do",
-                "            echo \"macOS VM running...\"",
-                "            sleep 300",
-                "          done"
-            ];
-
-            return lines.join("\n");
-        }
-
-        function generateLinuxYaml(runner, apps) {
-            var lines = [
-                "name: Linux VPS",
-                "",
-                "on:",
-                "  workflow_dispatch:",
-                "",
-                "jobs:",
-                "  vps:",
-                "    runs-on: " + runner,
-                "",
-                "    steps:",
-                "      - name: Install Tailscale",
-                "        run: |",
-                "          curl -fsSL https://tailscale.com/install.sh | sh",
-                "",
-                "      - name: Connect Tailscale",
-                "        run: |",
-                "          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}",
-                "",
-                "      - name: Show Tailscale IP",
-                "        run: |",
-                "          tailscale ip",
-                "",
-                "      - name: Keep Alive",
-                "        run: |",
-                "          while true; do",
-                "            echo \"Linux VPS running...\"",
-                "            sleep 300",
-                "          done"
-            ];
-
-            return lines.join("\n");
-        }
-
-        function generateScript() {
-            var runnerVersion = document.getElementById('os-version').value;
-            var checkboxes = document.querySelectorAll('.app-checkbox:checked');
-            var selectedApps = [];
-            for (var i = 0; i < checkboxes.length; i++) {
-                selectedApps.push(checkboxes[i].value);
-            }
-
-            document.getElementById('workflow-filename').textContent = currentOS + '-vps.yml';
-
-            var scriptContent = '';
-            if (currentOS === 'windows') {
-                var winUser = document.getElementById('win-user').value.trim() || 'runneradmin';
-                var winPass = document.getElementById('win-pass').value.trim() || 'Password123!';
-                var debloat = document.getElementById('win-debloat').checked;
-                var blackBg = document.getElementById('win-black-wallpaper').checked;
-                scriptContent = generateWindowsYaml(runnerVersion, selectedApps, winUser, winPass, debloat, blackBg);
-            } else if (currentOS === 'macos') {
-                scriptContent = generateMacosYaml(runnerVersion, selectedApps);
-            } else if (currentOS === 'linux') {
-                scriptContent = generateLinuxYaml(runnerVersion, selectedApps);
-            }
-
-            document.getElementById('script-output').textContent = scriptContent;
-            document.getElementById('output-section').classList.remove('hidden');
-        }
-
-        function copyScript() {
-            var text = document.getElementById('script-output').textContent;
-            navigator.clipboard.writeText(text).then(function() {
-                alert('Script copied to clipboard!');
-            });
-        }
-
-        window.onload = function() {
-            selectOS('windows');
-        };
-    </script>
-</body>
-</html>
+      - name: Keep Alive
+        shell: powershell
+        run: |
+          while($true){
+            Write-Host "Windows VPS running..."
+            Start-Sleep 300
+          }
