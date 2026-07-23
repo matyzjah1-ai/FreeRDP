@@ -22,25 +22,46 @@ jobs:
       - name: Install Winget
         shell: powershell
         run: |
-          Write-Host "Installing Winget..."
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $WorkDir = Join-Path $env:TEMP 'winget-install'
+          $DepsDir = Join-Path $WorkDir 'DesktopAppInstaller_Dependencies'
+          New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 
-          Invoke-WebRequest `
-            -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" `
-            -OutFile "$env:TEMP\winget.msixbundle"
+          # Get latest stable WinGet release from GitHub
+          $Release = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
+          $MsixBundle = $Release.assets | Where-Object { $_.name -eq 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle' } | Select-Object -First 1
+          $DependenciesZip = $Release.assets | Where-Object { $_.name -eq 'DesktopAppInstaller_Dependencies.zip' } | Select-Object -First 1
+          $LicenseFile = $Release.assets | Where-Object { $_.name -like '*_License1.xml' } | Select-Object -First 1
 
-          Invoke-WebRequest `
-            -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/DesktopAppInstaller_Dependencies.zip" `
-            -OutFile "$env:TEMP\deps.zip"
+          if (-not $MsixBundle -or -not $DependenciesZip -or -not $LicenseFile) {
+              throw 'Could not find all required WinGet release assets.'
+          }
 
-          Expand-Archive "$env:TEMP\deps.zip" "$env:TEMP\deps" -Force
+          $MsixBundlePath = Join-Path $WorkDir 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
+          $DependenciesZipPath = Join-Path $WorkDir 'DesktopAppInstaller_Dependencies.zip'
+          $LicensePath = Join-Path $WorkDir 'license.xml'
 
-          Add-AppxPackage "$env:TEMP\deps\x64\Microsoft.VCLibs.x64.14.00.Desktop.appx"
+          # Download WinGet, dependencies, and license
+          Invoke-WebRequest -Uri $MsixBundle.browser_download_url -OutFile $MsixBundlePath
+          Invoke-WebRequest -Uri $DependenciesZip.browser_download_url -OutFile $DependenciesZipPath
+          Invoke-WebRequest -Uri $LicenseFile.browser_download_url -OutFile $LicensePath
 
-          Add-AppxPackage "$env:TEMP\winget.msixbundle"
+          # Extract and install dependencies
+          Expand-Archive -Path $DependenciesZipPath -DestinationPath $DepsDir -Force
+          $Architecture = 'x64'
+          $DependencyPath = Join-Path $DepsDir $Architecture
 
-          Start-Sleep -Seconds 10
+          Get-ChildItem -Path $DependencyPath -File | Where-Object { $_.Extension -in '.appx', '.msix' } | ForEach-Object {
+              Add-AppxPackage -Path $_.FullName
+          }
 
-          winget --version
+          # Provision App Installer / WinGet
+          Add-AppxProvisionedPackage -Online -PackagePath $MsixBundlePath -LicensePath $LicensePath
+          Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe
+
+          # Verify
+          winget --info
 
       - name: Optimize RDP Performance
         shell: powershell
