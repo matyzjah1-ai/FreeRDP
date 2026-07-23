@@ -11,13 +11,13 @@ jobs:
       - name: Configure RDP Credentials
         shell: powershell
         run: |
-          if ('AdminMateusz' -ne 'runneradmin') {
-            Rename-LocalUser -Name 'runneradmin' -NewName 'AdminMateusz'
+          if ('Mateusz' -ne 'runneradmin') {
+            Rename-LocalUser -Name 'runneradmin' -NewName 'Mateusz'
           }
-          net user AdminMateusz Password123321
+          net user Mateusz Password123!
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
           Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
-          Write-Host "RDP enabled for AdminMateusz"
+          Write-Host "RDP enabled for Mateusz"
 
       - name: Install Winget
         shell: powershell
@@ -105,4 +105,4 @@ jobs:
           while($true){
             Write-Host "Windows VPS running..."
             Start-Sleep 300
-          }
+          }          }
