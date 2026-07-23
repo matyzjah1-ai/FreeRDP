@@ -1,11 +1,11 @@
-name: macOS Remote Desktop
+name: macOS Tahoe Remote Desktop
 
 on:
   workflow_dispatch:
 
 jobs:
   remote-desktop:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 120
 
     steps:
@@ -14,7 +14,7 @@ jobs:
 
       - name: Set Runner User Password & Enable VNC
         run: |
-          # 1. Set password for 'runner' using pipe into standard passwd
+          # 1. Set password for the 'runner' account
           printf "Password123!\nPassword123!\n" | sudo passwd runner
           
           # 2. Enable built-in macOS Screen Sharing / VNC
@@ -24,18 +24,23 @@ jobs:
             -clientopts -setvncpw -vncpw Password123! \
             -restart -agent -privs -all
 
-      - name: Connect Tailscale
-        uses: tailscale/github-action@v2
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
+      - name: Install and Connect Tailscale
+        run: |
+          # Install Tailscale via Homebrew (Native macOS method)
+          brew install tailscale
+          
+          # Start Tailscale background daemon
+          sudo tailscaled &
+          sleep 5
+          
+          # Connect to Tailscale network
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }}
 
       - name: Output Tailscale IP & Connection Info
         run: |
           TS_IP=$(tailscale ip -4)
           echo "=========================================================="
-          echo " macOS VNC Server Ready!"
+          echo " macOS Tahoe VNC Server Ready!"
           echo " Tailscale IP: $TS_IP"
           echo " VNC Address:  vnc://$TS_IP"
           echo " Username:     runner"
