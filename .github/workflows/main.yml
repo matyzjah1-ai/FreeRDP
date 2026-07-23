@@ -5,7 +5,7 @@ on:
 
 jobs:
   remote-desktop:
-    runs-on: macos-15 # (Note: GitHub uses macos-14 / macos-15 for modern macOS images)
+    runs-on: macos-15
     timeout-minutes: 120
 
     steps:
@@ -14,8 +14,8 @@ jobs:
 
       - name: Set Runner User Password & Enable VNC
         run: |
-          # 1. Set password for the runner user using macOS native tool 'dscl'
-          sudo dscl . -passwd /Users/runner Password123!
+          # 1. Set password for 'runner' using pipe into standard passwd
+          printf "Password123!\nPassword123!\n" | sudo passwd runner
           
           # 2. Enable built-in macOS Screen Sharing / VNC
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
